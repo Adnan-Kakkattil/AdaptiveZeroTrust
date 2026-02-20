@@ -1,10 +1,13 @@
+import csv
+import io
 import random
 import sqlite3
 from datetime import datetime
+from functools import wraps
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, make_response, request, send_from_directory, session
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -12,6 +15,15 @@ DB_DIR = BASE_DIR / "data"
 DB_PATH = DB_DIR / "zero_trust.db"
 
 app = Flask(__name__)
+app.secret_key = "adaptive-zero-trust-demo-secret"
+
+DEFAULT_POLICY = {
+    "location_weight": 0.30,
+    "device_weight": 0.40,
+    "behavior_weight": 0.30,
+    "revoke_threshold": 45,
+    "step_up_threshold": 68,
+}
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -57,6 +69,27 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS auth_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL,
+                full_name TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS policy_config (
+                config_key TEXT PRIMARY KEY,
+                config_value TEXT NOT NULL,
+                updated_by TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
         conn.commit()
 
         existing = conn.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"]
@@ -94,6 +127,132 @@ def init_db() -> None:
             )
             conn.commit()
 
+        auth_existing = conn.execute("SELECT COUNT(*) AS total FROM auth_users").fetchone()["total"]
+        if auth_existing == 0:
+            conn.executemany(
+                """
+                INSERT INTO auth_users (username, password, role, full_name)
+                VALUES (?, ?, ?, ?)
+                """,
+                [
+                    ("admin", "admin123", "admin", "SOC Administrator"),
+                    ("analyst", "analyst123", "analyst", "Security Analyst"),
+                ],
+            )
+
+        config_existing = conn.execute("SELECT COUNT(*) AS total FROM policy_config").fetchone()["total"]
+        if config_existing == 0:
+            now = datetime.utcnow().isoformat(timespec="seconds")
+            conn.executemany(
+                """
+                INSERT INTO policy_config (config_key, config_value, updated_by, updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                [
+                    ("location_weight", str(DEFAULT_POLICY["location_weight"]), "system", now),
+                    ("device_weight", str(DEFAULT_POLICY["device_weight"]), "system", now),
+                    ("behavior_weight", str(DEFAULT_POLICY["behavior_weight"]), "system", now),
+                    ("revoke_threshold", str(DEFAULT_POLICY["revoke_threshold"]), "system", now),
+                    ("step_up_threshold", str(DEFAULT_POLICY["step_up_threshold"]), "system", now),
+                ],
+            )
+        conn.commit()
+
+
+def log_event(severity: str, event_type: str, message: str, user_code: str | None = None) -> None:
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    with get_db_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO policy_events (event_time, severity, event_type, message, user_code)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (now, severity, event_type, message, user_code),
+        )
+        conn.commit()
+
+
+def current_identity() -> Dict[str, str] | None:
+    if "username" not in session:
+        return None
+    return {
+        "username": session["username"],
+        "role": session["role"],
+        "fullName": session["full_name"],
+    }
+
+
+def require_auth(roles: List[str] | None = None):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            identity = current_identity()
+            if not identity:
+                return jsonify({"error": "Authentication required"}), 401
+            if roles and identity["role"] not in roles:
+                return jsonify({"error": "Insufficient privileges"}), 403
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def get_policy_config() -> Dict[str, Any]:
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT config_key, config_value, updated_by, updated_at
+            FROM policy_config
+            """
+        ).fetchall()
+
+    config_map = {row["config_key"]: row["config_value"] for row in rows}
+    location_weight = float(config_map.get("location_weight", DEFAULT_POLICY["location_weight"]))
+    device_weight = float(config_map.get("device_weight", DEFAULT_POLICY["device_weight"]))
+    behavior_weight = float(config_map.get("behavior_weight", DEFAULT_POLICY["behavior_weight"]))
+    total = location_weight + device_weight + behavior_weight
+    if total == 0:
+        location_weight, device_weight, behavior_weight = (
+            DEFAULT_POLICY["location_weight"],
+            DEFAULT_POLICY["device_weight"],
+            DEFAULT_POLICY["behavior_weight"],
+        )
+        total = 1.0
+
+    return {
+        "locationWeight": round(location_weight / total, 3),
+        "deviceWeight": round(device_weight / total, 3),
+        "behaviorWeight": round(behavior_weight / total, 3),
+        "revokeThreshold": int(float(config_map.get("revoke_threshold", DEFAULT_POLICY["revoke_threshold"]))),
+        "stepUpThreshold": int(float(config_map.get("step_up_threshold", DEFAULT_POLICY["step_up_threshold"]))),
+    }
+
+
+def save_policy_config(new_policy: Dict[str, Any], updated_by: str) -> Dict[str, Any]:
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    with get_db_connection() as conn:
+        for key, value in {
+            "location_weight": new_policy["locationWeight"],
+            "device_weight": new_policy["deviceWeight"],
+            "behavior_weight": new_policy["behaviorWeight"],
+            "revoke_threshold": new_policy["revokeThreshold"],
+            "step_up_threshold": new_policy["stepUpThreshold"],
+        }.items():
+            conn.execute(
+                """
+                INSERT INTO policy_config (config_key, config_value, updated_by, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(config_key) DO UPDATE SET
+                    config_value = excluded.config_value,
+                    updated_by = excluded.updated_by,
+                    updated_at = excluded.updated_at
+                """,
+                (key, str(value), updated_by, now),
+            )
+        conn.commit()
+    return get_policy_config()
+
 
 def score_location(location: str) -> int:
     if "VPN" in location or "Anonymous" in location:
@@ -113,15 +272,16 @@ def score_device(device_posture: str) -> int:
     return mapping.get(device_posture, random.randint(50, 75))
 
 
-def decide_access(trust_score: int) -> str:
-    if trust_score < 45:
+def decide_access(trust_score: int, revoke_threshold: int, step_up_threshold: int) -> str:
+    if trust_score < revoke_threshold:
         return "REVOKE"
-    if trust_score < 68:
+    if trust_score < step_up_threshold:
         return "STEP_UP"
     return "ALLOW"
 
 
 def recalculate_users() -> Dict[str, int]:
+    policy = get_policy_config()
     with get_db_connection() as conn:
         users = conn.execute("SELECT * FROM users ORDER BY id").fetchall()
         now = datetime.utcnow().isoformat(timespec="seconds")
@@ -132,12 +292,16 @@ def recalculate_users() -> Dict[str, int]:
             device_component = score_device(user["device_posture"])
             behavioral_component = clamp(user["behavior_score"] + random.randint(-4, 3))
             trust = int(
-                (location_component * 0.30)
-                + (device_component * 0.40)
-                + (behavioral_component * 0.30)
+                (location_component * policy["locationWeight"])
+                + (device_component * policy["deviceWeight"])
+                + (behavioral_component * policy["behaviorWeight"])
             )
             trust = clamp(trust + random.randint(-2, 2))
-            access = decide_access(trust)
+            access = decide_access(
+                trust,
+                policy["revokeThreshold"],
+                policy["stepUpThreshold"],
+            )
             if access == "REVOKE":
                 policy_denials += 1
 
@@ -229,6 +393,7 @@ def get_dashboard_payload() -> Dict[str, List[Dict[str, str]]]:
         },
         "users": users_json,
         "events": events_json,
+        "policy": get_policy_config(),
     }
 
 
@@ -237,13 +402,60 @@ def home():
     return send_from_directory(BASE_DIR, "index.html")
 
 
+@app.route("/api/auth/me")
+def auth_me():
+    identity = current_identity()
+    if not identity:
+        return jsonify({"authenticated": False}), 200
+    return jsonify({"authenticated": True, "user": identity})
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def auth_login():
+    body = request.get_json(silent=True) or {}
+    username = str(body.get("username", "")).strip()
+    password = str(body.get("password", "")).strip()
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+
+    with get_db_connection() as conn:
+        user = conn.execute(
+            """
+            SELECT username, password, role, full_name
+            FROM auth_users
+            WHERE username = ?
+            """,
+            (username,),
+        ).fetchone()
+
+    if user is None or user["password"] != password:
+        return jsonify({"error": "Invalid credentials"}), 401
+
+    session["username"] = user["username"]
+    session["role"] = user["role"]
+    session["full_name"] = user["full_name"]
+    log_event("INFO", "LOGIN_SUCCESS", f"Operator login: {user['username']}")
+    return jsonify({"ok": True, "user": current_identity()})
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+@require_auth()
+def auth_logout():
+    username = session.get("username", "unknown")
+    session.clear()
+    log_event("INFO", "LOGOUT", f"Operator logout: {username}")
+    return jsonify({"ok": True})
+
+
 @app.route("/api/tick")
+@require_auth(["admin", "analyst"])
 def tick():
     recalculate_users()
     return jsonify(get_dashboard_payload())
 
 
 @app.route("/api/inject-anomaly", methods=["POST"])
+@require_auth(["admin"])
 def inject_anomaly():
     with get_db_connection() as conn:
         target = conn.execute(
@@ -299,6 +511,92 @@ def inject_anomaly():
         conn.commit()
 
     return jsonify({"ok": True, "targetUser": target["name"], "targetCode": target["user_code"]})
+
+
+@app.route("/api/policy", methods=["GET"])
+@require_auth(["admin", "analyst"])
+def get_policy():
+    return jsonify({"policy": get_policy_config()})
+
+
+@app.route("/api/policy", methods=["POST"])
+@require_auth(["admin"])
+def update_policy():
+    payload = request.get_json(silent=True) or {}
+    required_fields = [
+        "locationWeight",
+        "deviceWeight",
+        "behaviorWeight",
+        "revokeThreshold",
+        "stepUpThreshold",
+    ]
+    for field in required_fields:
+        if field not in payload:
+            return jsonify({"error": f"Missing field: {field}"}), 400
+
+    try:
+        updated = {
+            "locationWeight": float(payload["locationWeight"]),
+            "deviceWeight": float(payload["deviceWeight"]),
+            "behaviorWeight": float(payload["behaviorWeight"]),
+            "revokeThreshold": int(payload["revokeThreshold"]),
+            "stepUpThreshold": int(payload["stepUpThreshold"]),
+        }
+    except ValueError:
+        return jsonify({"error": "Invalid policy values"}), 400
+
+    if min(updated["locationWeight"], updated["deviceWeight"], updated["behaviorWeight"]) < 0:
+        return jsonify({"error": "Weights must be non-negative"}), 400
+    if not (0 <= updated["revokeThreshold"] <= 100 and 0 <= updated["stepUpThreshold"] <= 100):
+        return jsonify({"error": "Thresholds must be between 0 and 100"}), 400
+    if updated["revokeThreshold"] >= updated["stepUpThreshold"]:
+        return jsonify({"error": "revokeThreshold must be less than stepUpThreshold"}), 400
+
+    new_policy = save_policy_config(updated, session["username"])
+    log_event(
+        "INFO",
+        "POLICY_UPDATED",
+        (
+            f"Policy updated by {session['username']}: "
+            f"weights=({new_policy['locationWeight']},{new_policy['deviceWeight']},{new_policy['behaviorWeight']}), "
+            f"thresholds=({new_policy['revokeThreshold']},{new_policy['stepUpThreshold']})"
+        ),
+    )
+    return jsonify({"ok": True, "policy": new_policy})
+
+
+@app.route("/api/audit/export.csv")
+@require_auth(["admin", "analyst"])
+def export_audit_csv():
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, event_time, severity, event_type, message, user_code
+            FROM policy_events
+            ORDER BY id DESC
+            LIMIT 200
+            """
+        ).fetchall()
+
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["id", "event_time", "severity", "event_type", "message", "user_code"])
+    for row in rows:
+        writer.writerow(
+            [
+                row["id"],
+                row["event_time"],
+                row["severity"],
+                row["event_type"],
+                row["message"],
+                row["user_code"] or "",
+            ]
+        )
+
+    response = make_response(out.getvalue())
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = "attachment; filename=audit-events.csv"
+    return response
 
 
 if __name__ == "__main__":

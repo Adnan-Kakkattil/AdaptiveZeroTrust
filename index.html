@@ -109,13 +109,20 @@
                     <p class="text-xs md:text-sm text-slate-300/90">Continuous User Verification | Python + SQLite Policy Engine</p>
                 </div>
             </div>
-            <div class="flex items-center gap-3 text-xs">
+            <div class="flex items-center flex-wrap gap-3 text-xs">
+                <div id="operator-badge" class="hidden px-3 py-2 rounded-lg bg-cyan-500/15 border border-cyan-300/20 text-cyan-100"></div>
                 <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-300/20">
                     <span class="status-pulse"></span>
                     <span class="font-semibold text-emerald-200">Stream Active</span>
                 </div>
+                <a id="export-btn" href="/api/audit/export.csv" class="px-4 py-2 rounded-lg bg-indigo-500/20 text-indigo-100 border border-indigo-300/30 hover:bg-indigo-500/30 transition">
+                    <i class="fa-solid fa-file-arrow-down mr-2"></i>Export Audit CSV
+                </a>
                 <button id="inject-btn" class="px-4 py-2 rounded-lg bg-rose-500/20 text-rose-200 border border-rose-300/30 hover:bg-rose-500/30 transition">
                     <i class="fa-solid fa-triangle-exclamation mr-2"></i>Inject Anomalous Pattern
+                </button>
+                <button id="logout-btn" class="px-4 py-2 rounded-lg bg-slate-500/20 text-slate-100 border border-slate-300/20 hover:bg-slate-500/30 transition">
+                    <i class="fa-solid fa-right-from-bracket mr-2"></i>Logout
                 </button>
             </div>
         </header>
@@ -167,6 +174,38 @@
 
             <div class="space-y-6">
                 <div class="glass rounded-2xl p-5">
+                    <h3 class="text-sm font-semibold mb-4">Policy Editor (Role-Based)</h3>
+                    <div class="grid grid-cols-2 gap-3 text-xs">
+                        <label class="block">
+                            <span class="text-slate-300">Location Weight</span>
+                            <input id="policy-location-weight" type="number" min="0" step="0.01" class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 focus:outline-none focus:ring focus:ring-cyan-700/60">
+                        </label>
+                        <label class="block">
+                            <span class="text-slate-300">Device Weight</span>
+                            <input id="policy-device-weight" type="number" min="0" step="0.01" class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 focus:outline-none focus:ring focus:ring-cyan-700/60">
+                        </label>
+                        <label class="block">
+                            <span class="text-slate-300">Behavior Weight</span>
+                            <input id="policy-behavior-weight" type="number" min="0" step="0.01" class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 focus:outline-none focus:ring focus:ring-cyan-700/60">
+                        </label>
+                        <label class="block">
+                            <span class="text-slate-300">Revoke Threshold</span>
+                            <input id="policy-revoke-threshold" type="number" min="0" max="100" step="1" class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 focus:outline-none focus:ring focus:ring-cyan-700/60">
+                        </label>
+                        <label class="block col-span-2">
+                            <span class="text-slate-300">Step-Up Threshold</span>
+                            <input id="policy-step-threshold" type="number" min="0" max="100" step="1" class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 focus:outline-none focus:ring focus:ring-cyan-700/60">
+                        </label>
+                    </div>
+                    <div class="mt-3 flex items-center justify-between gap-3">
+                        <p id="policy-note" class="text-[11px] text-slate-400">Admins can update live policy values.</p>
+                        <button id="save-policy-btn" class="px-3 py-2 rounded-lg bg-cyan-500/25 border border-cyan-300/25 text-cyan-100 hover:bg-cyan-500/35 transition text-xs">
+                            Save Policy
+                        </button>
+                    </div>
+                </div>
+
+                <div class="glass rounded-2xl p-5">
                     <h3 class="text-sm font-semibold mb-4">Least Privilege Guardrails</h3>
                     <div class="space-y-2 text-xs">
                         <div class="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-300/20 flex justify-between">
@@ -211,6 +250,25 @@
         </div>
     </div>
 
+    <div id="login-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="glass rounded-2xl max-w-md w-full p-6 border border-cyan-200/20">
+            <h2 class="text-xl font-semibold mb-2">Operator Login</h2>
+            <p class="text-xs text-slate-300 mb-4">Demo users: <span class="mono">admin/admin123</span> or <span class="mono">analyst/analyst123</span></p>
+            <form id="login-form" class="space-y-3">
+                <label class="block text-sm">
+                    Username
+                    <input id="login-username" required class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 focus:outline-none focus:ring focus:ring-cyan-700/60">
+                </label>
+                <label class="block text-sm">
+                    Password
+                    <input id="login-password" type="password" required class="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 focus:outline-none focus:ring focus:ring-cyan-700/60">
+                </label>
+                <button class="w-full py-2.5 rounded-lg bg-cyan-500/30 border border-cyan-300/25 hover:bg-cyan-500/40 transition">Sign In</button>
+            </form>
+            <p id="login-error" class="text-rose-300 text-sm mt-3 hidden"></p>
+        </div>
+    </div>
+
     <script>
         const elements = {
             metricActive: document.getElementById("metric-active"),
@@ -221,10 +279,67 @@
             tbody: document.getElementById("verification-table-body"),
             logs: document.getElementById("log-container"),
             injectBtn: document.getElementById("inject-btn"),
+            exportBtn: document.getElementById("export-btn"),
+            logoutBtn: document.getElementById("logout-btn"),
             alertModal: document.getElementById("alert-modal"),
             alertUser: document.getElementById("alert-user"),
             alertClose: document.getElementById("alert-close"),
+            operatorBadge: document.getElementById("operator-badge"),
+            loginModal: document.getElementById("login-modal"),
+            loginForm: document.getElementById("login-form"),
+            loginUsername: document.getElementById("login-username"),
+            loginPassword: document.getElementById("login-password"),
+            loginError: document.getElementById("login-error"),
+            policyLocationWeight: document.getElementById("policy-location-weight"),
+            policyDeviceWeight: document.getElementById("policy-device-weight"),
+            policyBehaviorWeight: document.getElementById("policy-behavior-weight"),
+            policyRevokeThreshold: document.getElementById("policy-revoke-threshold"),
+            policyStepThreshold: document.getElementById("policy-step-threshold"),
+            savePolicyBtn: document.getElementById("save-policy-btn"),
+            policyNote: document.getElementById("policy-note"),
         };
+        let currentUser = null;
+        let pollHandle = null;
+
+        async function api(path, options = {}) {
+            const response = await fetch(path, options);
+            const payload = await response.json().catch(() => ({}));
+            if (response.status === 401) {
+                currentUser = null;
+                stopPolling();
+                showLogin();
+                throw new Error("Authentication required");
+            }
+            if (!response.ok) {
+                throw new Error(payload.error || "Request failed");
+            }
+            return payload;
+        }
+
+        function showLogin() {
+            elements.loginModal.classList.remove("hidden");
+            elements.loginModal.classList.add("flex");
+        }
+
+        function hideLogin() {
+            elements.loginModal.classList.add("hidden");
+            elements.loginModal.classList.remove("flex");
+            elements.loginError.classList.add("hidden");
+            elements.loginError.textContent = "";
+        }
+
+        function startPolling() {
+            stopPolling();
+            fetchTick();
+            pollHandle = setInterval(fetchTick, 4000);
+        }
+
+        function stopPolling() {
+            if (pollHandle) {
+                clearInterval(pollHandle);
+                pollHandle = null;
+            }
+        }
 
         function policyChipClass(state) {
             if (state === "REVOKE") return "risk-chip risk-revoke";
@@ -280,6 +395,29 @@
             elements.metricAllow.textContent = metrics.allowedSessions;
         }
 
+        function renderPolicy(policy) {
+            elements.policyLocationWeight.value = policy.locationWeight;
+            elements.policyDeviceWeight.value = policy.deviceWeight;
+            elements.policyBehaviorWeight.value = policy.behaviorWeight;
+            elements.policyRevokeThreshold.value = policy.revokeThreshold;
+            elements.policyStepThreshold.value = policy.stepUpThreshold;
+        }
+
+        function setRoleView() {
+            if (!currentUser) return;
+            const isAdmin = currentUser.role === "admin";
+            elements.operatorBadge.textContent = `${currentUser.fullName} (${currentUser.role.toUpperCase()})`;
+            elements.operatorBadge.classList.remove("hidden");
+
+            elements.injectBtn.disabled = !isAdmin;
+            elements.savePolicyBtn.disabled = !isAdmin;
+            elements.injectBtn.classList.toggle("opacity-40", !isAdmin);
+            elements.savePolicyBtn.classList.toggle("opacity-40", !isAdmin);
+            elements.policyNote.textContent = isAdmin
+                ? "You are admin. Changes apply immediately to scoring."
+                : "Read-only mode: only admins can modify policy.";
+        }
+
         function severityColor(severity) {
             if (severity === "CRITICAL") return "text-rose-300";
             if (severity === "WARN") return "text-amber-300";
@@ -298,11 +436,11 @@
 
         async function fetchTick() {
             try {
-                const response = await fetch("/api/tick");
-                const payload = await response.json();
+                const payload = await api("/api/tick");
                 renderMetrics(payload.metrics);
                 renderTable(payload.users);
                 renderLogs(payload.events);
+                renderPolicy(payload.policy);
             } catch (error) {
                 const line = document.createElement("div");
                 line.className = "text-rose-300";
@@ -312,11 +450,11 @@
         }
 
         async function injectAnomaly() {
+            if (!currentUser || currentUser.role !== "admin") return;
             elements.injectBtn.disabled = true;
             elements.injectBtn.classList.add("opacity-60");
             try {
-                const response = await fetch("/api/inject-anomaly", { method: "POST" });
-                const payload = await response.json();
+                const payload = await api("/api/inject-anomaly", { method: "POST" });
                 if (payload.targetUser) {
                     elements.alertUser.textContent = payload.targetUser;
                     elements.alertModal.classList.remove("hidden");
@@ -329,14 +467,97 @@
             }
         }
 
+        async function savePolicy() {
+            if (!currentUser || currentUser.role !== "admin") return;
+            elements.savePolicyBtn.disabled = true;
+            elements.savePolicyBtn.classList.add("opacity-60");
+            try {
+                const payload = await api("/api/policy", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        locationWeight: Number(elements.policyLocationWeight.value),
+                        deviceWeight: Number(elements.policyDeviceWeight.value),
+                        behaviorWeight: Number(elements.policyBehaviorWeight.value),
+                        revokeThreshold: Number(elements.policyRevokeThreshold.value),
+                        stepUpThreshold: Number(elements.policyStepThreshold.value),
+                    }),
+                });
+                renderPolicy(payload.policy);
+                await fetchTick();
+            } catch (error) {
+                elements.policyNote.textContent = `Policy update failed: ${error.message}`;
+            } finally {
+                elements.savePolicyBtn.disabled = false;
+                elements.savePolicyBtn.classList.remove("opacity-60");
+            }
+        }
+
+        async function checkAuth() {
+            try {
+                const payload = await api("/api/auth/me");
+                if (!payload.authenticated) {
+                    showLogin();
+                    return;
+                }
+                currentUser = payload.user;
+                hideLogin();
+                setRoleView();
+                startPolling();
+            } catch (_) {
+                showLogin();
+            }
+        }
+
+        async function logout() {
+            if (!currentUser) return;
+            try {
+                await api("/api/auth/logout", { method: "POST" });
+            } catch (_) {
+                // Ignore logout error and still reset UI.
+            }
+            currentUser = null;
+            elements.operatorBadge.classList.add("hidden");
+            stopPolling();
+            showLogin();
+        }
+
         elements.injectBtn.addEventListener("click", injectAnomaly);
+        elements.savePolicyBtn.addEventListener("click", savePolicy);
+        elements.logoutBtn.addEventListener("click", logout);
         elements.alertClose.addEventListener("click", () => {
             elements.alertModal.classList.add("hidden");
             elements.alertModal.classList.remove("flex");
         });
+        elements.loginForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            elements.loginError.classList.add("hidden");
+            try {
+                const payload = await api("/api/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        username: elements.loginUsername.value.trim(),
+                        password: elements.loginPassword.value,
+                    }),
+                });
+                currentUser = payload.user;
+                hideLogin();
+                setRoleView();
+                startPolling();
+            } catch (error) {
+                elements.loginError.textContent = error.message;
+                elements.loginError.classList.remove("hidden");
+            }
+        });
+        elements.exportBtn.addEventListener("click", (event) => {
+            if (!currentUser) {
+                event.preventDefault();
+                showLogin();
+            }
+        });
 
-        fetchTick();
-        setInterval(fetchTick, 4000);
+        checkAuth();
     </script>
 </body>
 </html> 
