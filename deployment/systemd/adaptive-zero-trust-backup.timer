@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Adaptive Zero Trust backup every day
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=adaptive-zero-trust-backup.service
+
+[Install]
+WantedBy=timers.target

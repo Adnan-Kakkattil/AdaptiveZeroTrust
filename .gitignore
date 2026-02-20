@@ -1,3 +1,6 @@
 data/zero_trust.db
 venv/
 __pycache__/
+logs/app.log
+.env
+backups/

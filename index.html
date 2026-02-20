@@ -115,7 +115,7 @@
                     <span class="status-pulse"></span>
                     <span class="font-semibold text-emerald-200">Stream Active</span>
                 </div>
-                <a id="export-btn" href="/api/audit/export.csv" class="px-4 py-2 rounded-lg bg-indigo-500/20 text-indigo-100 border border-indigo-300/30 hover:bg-indigo-500/30 transition">
+                <a id="export-btn" href="/api/v1/audit/export.csv" class="px-4 py-2 rounded-lg bg-indigo-500/20 text-indigo-100 border border-indigo-300/30 hover:bg-indigo-500/30 transition">
                     <i class="fa-solid fa-file-arrow-down mr-2"></i>Export Audit CSV
                 </a>
                 <button id="inject-btn" class="px-4 py-2 rounded-lg bg-rose-500/20 text-rose-200 border border-rose-300/30 hover:bg-rose-500/30 transition">
@@ -150,8 +150,10 @@
             </article>
         </section>
 
-        <section class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <div class="xl:col-span-2 glass rounded-2xl overflow-hidden">
+        <section id="status-banner" class="glass rounded-xl px-4 py-3 text-sm hidden"></section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-4 gap-6">
+            <div class="xl:col-span-3 glass rounded-2xl overflow-hidden">
                 <div class="px-5 py-4 border-b border-slate-400/20 flex justify-between items-center">
                     <h2 class="font-semibold tracking-tight text-sm md:text-base">Real-Time Continuous Verification Feed</h2>
                     <span class="text-[11px] uppercase tracking-[0.16em] text-slate-400">Who + Where + When + What</span>
@@ -173,6 +175,11 @@
             </div>
 
             <div class="space-y-6">
+                <div class="glass rounded-2xl p-5">
+                    <h3 class="text-sm font-semibold mb-3">Identity Detail</h3>
+                    <div id="identity-detail" class="space-y-2 text-sm text-slate-200"></div>
+                </div>
+
                 <div class="glass rounded-2xl p-5">
                     <h3 class="text-sm font-semibold mb-4">Policy Editor (Role-Based)</h3>
                     <div class="grid grid-cols-2 gap-3 text-xs">
@@ -226,6 +233,50 @@
                 </div>
             </div>
         </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div class="glass rounded-2xl p-5">
+                <div class="flex items-center justify-between gap-3 mb-3">
+                    <h3 class="text-sm font-semibold">Audit Event History</h3>
+                    <div class="flex items-center gap-2 text-xs">
+                        <select id="audit-severity" class="px-2 py-1 rounded bg-slate-800/70 border border-slate-600">
+                            <option value="">All severity</option>
+                            <option value="INFO">INFO</option>
+                            <option value="WARN">WARN</option>
+                            <option value="CRITICAL">CRITICAL</option>
+                        </select>
+                        <button id="audit-refresh-btn" class="px-2 py-1 rounded bg-slate-700/70 border border-slate-500">Apply</button>
+                    </div>
+                </div>
+                <div id="audit-list" class="mono text-[12px] h-72 overflow-y-auto space-y-2 text-slate-300/90"></div>
+                <div class="mt-3 flex items-center justify-between text-xs">
+                    <button id="audit-prev" class="px-2 py-1 rounded bg-slate-700/70 border border-slate-500">Prev</button>
+                    <span id="audit-page-label" class="text-slate-400">Page 1</span>
+                    <button id="audit-next" class="px-2 py-1 rounded bg-slate-700/70 border border-slate-500">Next</button>
+                </div>
+            </div>
+
+            <div class="glass rounded-2xl p-5">
+                <div class="flex items-center justify-between gap-3 mb-3">
+                    <h3 class="text-sm font-semibold">Policy Decision History</h3>
+                    <div class="flex items-center gap-2 text-xs">
+                        <select id="decision-filter" class="px-2 py-1 rounded bg-slate-800/70 border border-slate-600">
+                            <option value="">All decisions</option>
+                            <option value="ALLOW">ALLOW</option>
+                            <option value="STEP_UP">STEP_UP</option>
+                            <option value="REVOKE">REVOKE</option>
+                        </select>
+                        <button id="decision-refresh-btn" class="px-2 py-1 rounded bg-slate-700/70 border border-slate-500">Apply</button>
+                    </div>
+                </div>
+                <div id="decision-list" class="mono text-[12px] h-72 overflow-y-auto space-y-2 text-slate-300/90"></div>
+                <div class="mt-3 flex items-center justify-between text-xs">
+                    <button id="decision-prev" class="px-2 py-1 rounded bg-slate-700/70 border border-slate-500">Prev</button>
+                    <span id="decision-page-label" class="text-slate-400">Page 1</span>
+                    <button id="decision-next" class="px-2 py-1 rounded bg-slate-700/70 border border-slate-500">Next</button>
+                </div>
+            </div>
+        </section>
     </div>
 
     <div id="alert-modal" class="fixed inset-0 bg-slate-950/75 backdrop-blur-sm hidden items-center justify-center p-4">
@@ -276,8 +327,10 @@
             metricRevoke: document.getElementById("metric-revoke"),
             metricStep: document.getElementById("metric-step"),
             metricAllow: document.getElementById("metric-allow"),
+            statusBanner: document.getElementById("status-banner"),
             tbody: document.getElementById("verification-table-body"),
             logs: document.getElementById("log-container"),
+            identityDetail: document.getElementById("identity-detail"),
             injectBtn: document.getElementById("inject-btn"),
             exportBtn: document.getElementById("export-btn"),
             logoutBtn: document.getElementById("logout-btn"),
@@ -297,13 +350,52 @@
             policyStepThreshold: document.getElementById("policy-step-threshold"),
             savePolicyBtn: document.getElementById("save-policy-btn"),
             policyNote: document.getElementById("policy-note"),
+            auditList: document.getElementById("audit-list"),
+            auditSeverity: document.getElementById("audit-severity"),
+            auditRefreshBtn: document.getElementById("audit-refresh-btn"),
+            auditPrev: document.getElementById("audit-prev"),
+            auditNext: document.getElementById("audit-next"),
+            auditPageLabel: document.getElementById("audit-page-label"),
+            decisionList: document.getElementById("decision-list"),
+            decisionFilter: document.getElementById("decision-filter"),
+            decisionRefreshBtn: document.getElementById("decision-refresh-btn"),
+            decisionPrev: document.getElementById("decision-prev"),
+            decisionNext: document.getElementById("decision-next"),
+            decisionPageLabel: document.getElementById("decision-page-label"),
         };
+
         let currentUser = null;
         let pollHandle = null;
+        let identities = [];
+        let selectedIdentityCode = null;
+        let auditPage = 1;
+        let auditTotal = 0;
+        let decisionPage = 1;
+        let decisionTotal = 0;
+        let csrfToken = null;
+
+        function showStatus(message, level = "info") {
+            elements.statusBanner.classList.remove("hidden", "text-emerald-200", "text-amber-200", "text-rose-200");
+            elements.statusBanner.textContent = message;
+            if (level === "error") elements.statusBanner.classList.add("text-rose-200");
+            else if (level === "warn") elements.statusBanner.classList.add("text-amber-200");
+            else elements.statusBanner.classList.add("text-emerald-200");
+        }
+
+        function hideStatus() {
+            elements.statusBanner.classList.add("hidden");
+            elements.statusBanner.textContent = "";
+        }
 
         async function api(path, options = {}) {
-            const response = await fetch(path, options);
-            const payload = await response.json().catch(() => ({}));
+            const requestOptions = { ...options, headers: { ...(options.headers || {}) } };
+            if (csrfToken && ["POST", "PUT", "PATCH", "DELETE"].includes((requestOptions.method || "GET").toUpperCase())) {
+                requestOptions.headers["X-CSRF-Token"] = csrfToken;
+            }
+            const response = await fetch(path, requestOptions);
+            const payload = await response.json().catch(() => null);
+            if (!payload) throw new Error("Invalid server response");
+
             if (response.status === 401) {
                 currentUser = null;
                 stopPolling();
@@ -311,9 +403,25 @@
                 throw new Error("Authentication required");
             }
             if (!response.ok) {
-                throw new Error(payload.error || "Request failed");
+                throw new Error(payload.error?.message || "Request failed");
             }
-            return payload;
+            return payload.data;
+        }
+
+        async function apiWithRetry(path, options = {}, retries = 2) {
+            let lastError = null;
+            for (let attempt = 0; attempt <= retries; attempt += 1) {
+                try {
+                    return await api(path, options);
+                } catch (error) {
+                    lastError = error;
+                    const isAuthError = error.message === "Authentication required";
+                    if (isAuthError || attempt === retries) break;
+                    const backoff = (attempt + 1) * 400;
+                    await new Promise((resolve) => setTimeout(resolve, backoff));
+                }
+            }
+            throw lastError;
         }
 
         function showLogin() {
@@ -330,6 +438,7 @@
 
         function startPolling() {
             stopPolling();
+            showStatus("Loading telemetry...");
             fetchTick();
             pollHandle = setInterval(fetchTick, 4000);
         }
@@ -353,15 +462,43 @@
             return "text-emerald-300";
         }
 
+        function renderMetrics(metrics) {
+            elements.metricActive.textContent = metrics.activeIdentities;
+            elements.metricTrust.textContent = metrics.trustIndex;
+            elements.metricRevoke.textContent = metrics.revokedSessions;
+            elements.metricStep.textContent = metrics.stepUpChallenges;
+            elements.metricAllow.textContent = metrics.allowedSessions;
+        }
+
+        function renderIdentityDetail() {
+            const identity = identities.find((item) => item.identityCode === selectedIdentityCode);
+            if (!identity) {
+                elements.identityDetail.innerHTML = `<p class="text-slate-400">Select an identity from the table.</p>`;
+                return;
+            }
+            elements.identityDetail.innerHTML = `
+                <div><span class="text-slate-400">Name:</span> ${identity.name}</div>
+                <div><span class="text-slate-400">Identity:</span> <span class="mono">${identity.identityCode}</span></div>
+                <div><span class="text-slate-400">Role:</span> ${identity.role}</div>
+                <div><span class="text-slate-400">Asset:</span> ${identity.protectedAsset}</div>
+                <div><span class="text-slate-400">Context:</span> ${identity.location} / <span class="mono">${identity.ipAddress}</span></div>
+                <div><span class="text-slate-400">Device:</span> ${identity.devicePosture}</div>
+                <div><span class="text-slate-400">Last Seen:</span> ${identity.lastSeen.replace("T", " ")}</div>
+            `;
+        }
+
         function renderTable(users) {
+            identities = users;
+            if (!selectedIdentityCode && users.length > 0) selectedIdentityCode = users[0].identityCode;
             elements.tbody.innerHTML = "";
             users.forEach((user) => {
                 const row = document.createElement("tr");
-                row.className = "hover:bg-slate-700/25 transition";
+                const selectedClass = user.identityCode === selectedIdentityCode ? "bg-cyan-600/20" : "";
+                row.className = `hover:bg-slate-700/25 transition cursor-pointer ${selectedClass}`;
                 row.innerHTML = `
                     <td class="px-4 py-3">
                         <div class="font-semibold">${user.name}</div>
-                        <div class="text-xs text-slate-400">${user.role} <span class="mono">(${user.userCode})</span></div>
+                        <div class="text-xs text-slate-400">${user.role} <span class="mono">(${user.identityCode})</span></div>
                     </td>
                     <td class="px-4 py-3">
                         <div class="text-xs">${user.location}</div>
@@ -383,16 +520,16 @@
                         <span class="${policyChipClass(user.accessState)}">${user.accessState}</span>
                     </td>
                 `;
+                row.addEventListener("click", () => {
+                    selectedIdentityCode = user.identityCode;
+                    renderTable(identities);
+                    renderIdentityDetail();
+                    decisionPage = 1;
+                    loadDecisionHistory();
+                });
                 elements.tbody.appendChild(row);
             });
-        }
-
-        function renderMetrics(metrics) {
-            elements.metricActive.textContent = metrics.activeIdentities;
-            elements.metricTrust.textContent = metrics.trustIndex;
-            elements.metricRevoke.textContent = metrics.revokedSessions;
-            elements.metricStep.textContent = metrics.stepUpChallenges;
-            elements.metricAllow.textContent = metrics.allowedSessions;
+            renderIdentityDetail();
         }
 
         function renderPolicy(policy) {
@@ -408,7 +545,6 @@
             const isAdmin = currentUser.role === "admin";
             elements.operatorBadge.textContent = `${currentUser.fullName} (${currentUser.role.toUpperCase()})`;
             elements.operatorBadge.classList.remove("hidden");
-
             elements.injectBtn.disabled = !isAdmin;
             elements.savePolicyBtn.disabled = !isAdmin;
             elements.injectBtn.classList.toggle("opacity-40", !isAdmin);
@@ -424,6 +560,35 @@
             return "text-cyan-300";
         }
 
+        function renderAudit(payload) {
+            auditTotal = payload.total;
+            const pages = Math.max(1, Math.ceil(payload.total / payload.pageSize));
+            elements.auditPageLabel.textContent = `Page ${payload.page} of ${pages}`;
+            elements.auditList.innerHTML = "";
+            payload.items.forEach((event) => {
+                const line = document.createElement("div");
+                line.className = `${severityColor(event.severity)} leading-relaxed`;
+                line.innerHTML = `[${event.eventTime.replace("T", " ")}] ${event.severity} ${event.eventType} ${event.message}`;
+                elements.auditList.appendChild(line);
+            });
+            if (!payload.items.length) elements.auditList.innerHTML = `<p class="text-slate-400">No events for current filter.</p>`;
+        }
+
+        function renderDecisions(payload) {
+            decisionTotal = payload.total;
+            const pages = Math.max(1, Math.ceil(payload.total / payload.pageSize));
+            elements.decisionPageLabel.textContent = `Page ${payload.page} of ${pages}`;
+            elements.decisionList.innerHTML = "";
+            payload.items.forEach((item) => {
+                const color = item.decision === "REVOKE" ? "text-rose-300" : item.decision === "STEP_UP" ? "text-amber-300" : "text-emerald-300";
+                const line = document.createElement("div");
+                line.className = color;
+                line.innerHTML = `[${item.decisionTime.replace("T", " ")}] ${item.identityCode} ${item.decision} trust=${item.trustScore} reasons=${item.reasons.join(",")}`;
+                elements.decisionList.appendChild(line);
+            });
+            if (!payload.items.length) elements.decisionList.innerHTML = `<p class="text-slate-400">No decisions for current filter.</p>`;
+        }
+
         function renderLogs(events) {
             elements.logs.innerHTML = "";
             events.forEach((event) => {
@@ -436,17 +601,30 @@
 
         async function fetchTick() {
             try {
-                const payload = await api("/api/tick");
+                const payload = await apiWithRetry("/api/v1/dashboard/tick");
                 renderMetrics(payload.metrics);
-                renderTable(payload.users);
-                renderLogs(payload.events);
+                renderTable(payload.identities);
                 renderPolicy(payload.policy);
+                renderLogs(payload.events);
+                hideStatus();
             } catch (error) {
-                const line = document.createElement("div");
-                line.className = "text-rose-300";
-                line.textContent = `[ERROR] Unable to reach policy engine: ${error.message}`;
-                elements.logs.prepend(line);
+                showStatus(`Dashboard error: ${error.message}`, "error");
             }
+        }
+
+        async function loadAuditEvents() {
+            const query = new URLSearchParams({ page: String(auditPage), pageSize: "12" });
+            if (elements.auditSeverity.value) query.set("severity", elements.auditSeverity.value);
+            const payload = await apiWithRetry(`/api/v1/audit/events?${query.toString()}`);
+            renderAudit(payload);
+        }
+
+        async function loadDecisionHistory() {
+            const query = new URLSearchParams({ page: String(decisionPage), pageSize: "12" });
+            if (elements.decisionFilter.value) query.set("decision", elements.decisionFilter.value);
+            if (selectedIdentityCode) query.set("identityCode", selectedIdentityCode);
+            const payload = await apiWithRetry(`/api/v1/policy-decisions?${query.toString()}`);
+            renderDecisions(payload);
         }
 
         async function injectAnomaly() {
@@ -454,13 +632,15 @@
             elements.injectBtn.disabled = true;
             elements.injectBtn.classList.add("opacity-60");
             try {
-                const payload = await api("/api/inject-anomaly", { method: "POST" });
+                const payload = await api("/api/v1/anomalies/inject", { method: "POST" });
                 if (payload.targetUser) {
                     elements.alertUser.textContent = payload.targetUser;
                     elements.alertModal.classList.remove("hidden");
                     elements.alertModal.classList.add("flex");
                 }
                 await fetchTick();
+                await loadAuditEvents();
+                await loadDecisionHistory();
             } finally {
                 elements.injectBtn.disabled = false;
                 elements.injectBtn.classList.remove("opacity-60");
@@ -472,8 +652,8 @@
             elements.savePolicyBtn.disabled = true;
             elements.savePolicyBtn.classList.add("opacity-60");
             try {
-                const payload = await api("/api/policy", {
-                    method: "POST",
+                const payload = await api("/api/v1/policy", {
+                    method: "PUT",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         locationWeight: Number(elements.policyLocationWeight.value),
@@ -484,7 +664,9 @@
                     }),
                 });
                 renderPolicy(payload.policy);
+                elements.policyNote.textContent = "Policy saved successfully.";
                 await fetchTick();
+                await loadDecisionHistory();
             } catch (error) {
                 elements.policyNote.textContent = `Policy update failed: ${error.message}`;
             } finally {
@@ -495,8 +677,9 @@
 
         async function checkAuth() {
             try {
-                const payload = await api("/api/auth/me");
+                const payload = await api("/api/v1/auth/me");
                 if (!payload.authenticated) {
+                    showStatus("Session expired. Please sign in to continue.", "warn");
                     showLogin();
                     return;
                 }
@@ -504,7 +687,10 @@
                 hideLogin();
                 setRoleView();
                 startPolling();
+                await loadAuditEvents();
+                await loadDecisionHistory();
             } catch (_) {
+                showStatus("Authentication required.", "warn");
                 showLogin();
             }
         }
@@ -512,19 +698,59 @@
         async function logout() {
             if (!currentUser) return;
             try {
-                await api("/api/auth/logout", { method: "POST" });
+                await api("/api/v1/auth/logout", { method: "POST" });
             } catch (_) {
                 // Ignore logout error and still reset UI.
             }
             currentUser = null;
             elements.operatorBadge.classList.add("hidden");
             stopPolling();
+            showStatus("Signed out successfully.", "info");
             showLogin();
+        }
+
+        async function loadCsrfToken() {
+            const payload = await api("/api/v1/auth/csrf");
+            csrfToken = payload.csrfToken;
         }
 
         elements.injectBtn.addEventListener("click", injectAnomaly);
         elements.savePolicyBtn.addEventListener("click", savePolicy);
         elements.logoutBtn.addEventListener("click", logout);
+        elements.auditRefreshBtn.addEventListener("click", async () => {
+            auditPage = 1;
+            await loadAuditEvents();
+        });
+        elements.auditPrev.addEventListener("click", async () => {
+            if (auditPage > 1) {
+                auditPage -= 1;
+                await loadAuditEvents();
+            }
+        });
+        elements.auditNext.addEventListener("click", async () => {
+            const pages = Math.max(1, Math.ceil(auditTotal / 12));
+            if (auditPage < pages) {
+                auditPage += 1;
+                await loadAuditEvents();
+            }
+        });
+        elements.decisionRefreshBtn.addEventListener("click", async () => {
+            decisionPage = 1;
+            await loadDecisionHistory();
+        });
+        elements.decisionPrev.addEventListener("click", async () => {
+            if (decisionPage > 1) {
+                decisionPage -= 1;
+                await loadDecisionHistory();
+            }
+        });
+        elements.decisionNext.addEventListener("click", async () => {
+            const pages = Math.max(1, Math.ceil(decisionTotal / 12));
+            if (decisionPage < pages) {
+                decisionPage += 1;
+                await loadDecisionHistory();
+            }
+        });
         elements.alertClose.addEventListener("click", () => {
             elements.alertModal.classList.add("hidden");
             elements.alertModal.classList.remove("flex");
@@ -533,7 +759,7 @@
             event.preventDefault();
             elements.loginError.classList.add("hidden");
             try {
-                const payload = await api("/api/auth/login", {
+                const payload = await api("/api/v1/auth/login", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -543,8 +769,11 @@
                 });
                 currentUser = payload.user;
                 hideLogin();
+                showStatus("Authenticated. Loading live telemetry...", "info");
                 setRoleView();
                 startPolling();
+                await loadAuditEvents();
+                await loadDecisionHistory();
             } catch (error) {
                 elements.loginError.textContent = error.message;
                 elements.loginError.classList.remove("hidden");
@@ -557,7 +786,7 @@
             }
         });
 
-        checkAuth();
+        loadCsrfToken().then(checkAuth).catch(() => showStatus("Unable to initialize session security.", "error"));
     </script>
 </body>
 </html> 
