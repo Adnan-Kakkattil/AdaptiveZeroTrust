@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adaptive Zero Trust Access Control System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap");
+
+        :root {
+            --panel: rgba(15, 23, 42, 0.62);
+            --panel-border: rgba(148, 163, 184, 0.18);
+            --soft: #94a3b8;
+            --good: #22c55e;
+            --warn: #f59e0b;
+            --bad: #f43f5e;
+        }
+
+        body {
+            font-family: "Inter", sans-serif;
+            color: #e2e8f0;
+            background: radial-gradient(circle at 20% 10%, #1e293b 0%, #0f172a 50%, #020617 100%);
+            min-height: 100vh;
+        }
+
+        .glass {
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 10px 40px rgba(2, 6, 23, 0.4);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+        }
+
+        .mono {
+            font-family: "JetBrains Mono", monospace;
+        }
+
+        .risk-chip {
+            padding: 0.18rem 0.56rem;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.07em;
+        }
+
+        .risk-allow {
+            color: #86efac;
+            background: rgba(34, 197, 94, 0.15);
+        }
+
+        .risk-step {
+            color: #fcd34d;
+            background: rgba(245, 158, 11, 0.17);
+        }
+
+        .risk-revoke {
+            color: #fda4af;
+            background: rgba(244, 63, 94, 0.2);
+        }
+
+        .status-pulse {
+            position: relative;
+            width: 10px;
+            height: 10px;
+            border-radius: 9999px;
+            background: #22c55e;
+        }
+
+        .status-pulse::after {
+            content: "";
+            position: absolute;
+            inset: -5px;
+            border-radius: 9999px;
+            border: 2px solid rgba(74, 222, 128, 0.45);
+            animation: ping 1.6s infinite;
+        }
+
+        @keyframes ping {
+            0% { transform: scale(0.7); opacity: 1; }
+            80%, 100% { transform: scale(1.35); opacity: 0; }
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.4);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.35);
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="px-4 md:px-8 py-6 md:py-8">
+    <div class="max-w-[1400px] mx-auto space-y-6">
+        <header class="glass rounded-2xl px-5 md:px-7 py-4 md:py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div class="flex items-center gap-4">
+                <div class="w-11 h-11 rounded-xl bg-cyan-500/20 border border-cyan-300/30 flex items-center justify-center text-cyan-200">
+                    <i class="fa-solid fa-shield-halved text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg md:text-xl font-semibold tracking-tight">Adaptive Zero Trust Access Control System</h1>
+                    <p class="text-xs md:text-sm text-slate-300/90">Continuous User Verification | Python + SQLite Policy Engine</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 text-xs">
+                <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-300/20">
+                    <span class="status-pulse"></span>
+                    <span class="font-semibold text-emerald-200">Stream Active</span>
+                </div>
+                <button id="inject-btn" class="px-4 py-2 rounded-lg bg-rose-500/20 text-rose-200 border border-rose-300/30 hover:bg-rose-500/30 transition">
+                    <i class="fa-solid fa-triangle-exclamation mr-2"></i>Inject Anomalous Pattern
+                </button>
+            </div>
+        </header>
+
+        <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+            <article class="glass rounded-xl p-4">
+                <p class="text-[11px] uppercase tracking-[0.18em] text-slate-400">Active Identities</p>
+                <p id="metric-active" class="text-3xl font-semibold mt-2">0</p>
+            </article>
+            <article class="glass rounded-xl p-4">
+                <p class="text-[11px] uppercase tracking-[0.18em] text-slate-400">Global Trust Index</p>
+                <p class="text-3xl font-semibold mt-2"><span id="metric-trust">0.0</span><span class="text-base text-slate-400"> / 100</span></p>
+            </article>
+            <article class="glass rounded-xl p-4">
+                <p class="text-[11px] uppercase tracking-[0.18em] text-slate-400">Revoked Sessions</p>
+                <p id="metric-revoke" class="text-3xl font-semibold mt-2 text-rose-300">0</p>
+            </article>
+            <article class="glass rounded-xl p-4">
+                <p class="text-[11px] uppercase tracking-[0.18em] text-slate-400">Step-Up Challenges</p>
+                <p id="metric-step" class="text-3xl font-semibold mt-2 text-amber-300">0</p>
+            </article>
+            <article class="glass rounded-xl p-4">
+                <p class="text-[11px] uppercase tracking-[0.18em] text-slate-400">Allowed Sessions</p>
+                <p id="metric-allow" class="text-3xl font-semibold mt-2 text-emerald-300">0</p>
+            </article>
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div class="xl:col-span-2 glass rounded-2xl overflow-hidden">
+                <div class="px-5 py-4 border-b border-slate-400/20 flex justify-between items-center">
+                    <h2 class="font-semibold tracking-tight text-sm md:text-base">Real-Time Continuous Verification Feed</h2>
+                    <span class="text-[11px] uppercase tracking-[0.16em] text-slate-400">Who + Where + When + What</span>
+                </div>
+                <div class="overflow-auto">
+                    <table class="w-full text-sm">
+                        <thead class="text-[11px] uppercase tracking-[0.14em] text-slate-400 border-b border-slate-500/25">
+                            <tr>
+                                <th class="text-left px-4 py-3">Identity</th>
+                                <th class="text-left px-4 py-3">Location / Context</th>
+                                <th class="text-left px-4 py-3">Device + Behavior</th>
+                                <th class="text-left px-4 py-3">Trust Score</th>
+                                <th class="text-left px-4 py-3">Policy Decision</th>
+                            </tr>
+                        </thead>
+                        <tbody id="verification-table-body" class="divide-y divide-slate-700/40"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="glass rounded-2xl p-5">
+                    <h3 class="text-sm font-semibold mb-4">Least Privilege Guardrails</h3>
+                    <div class="space-y-2 text-xs">
+                        <div class="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-300/20 flex justify-between">
+                            <span><i class="fa-solid fa-check mr-2"></i>Geo-Velocity Monitoring</span><span class="text-emerald-200">ON</span>
+                        </div>
+                        <div class="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-300/20 flex justify-between">
+                            <span><i class="fa-solid fa-check mr-2"></i>Adaptive MFA Escalation</span><span class="text-emerald-200">ON</span>
+                        </div>
+                        <div class="px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-300/20 flex justify-between">
+                            <span><i class="fa-solid fa-triangle-exclamation mr-2"></i>Device Drift Detection</span><span class="text-amber-200">WARN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass rounded-2xl p-5">
+                    <h3 class="text-sm font-semibold mb-3">Policy Engine Simulation Logs</h3>
+                    <div id="log-container" class="mono text-[12px] h-72 overflow-y-auto space-y-2 text-slate-300/90"></div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div id="alert-modal" class="fixed inset-0 bg-slate-950/75 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass rounded-2xl max-w-md w-full p-6 border border-rose-300/25">
+            <div class="flex items-center gap-4 mb-4">
+                <div class="w-14 h-14 rounded-full bg-rose-500/25 border border-rose-300/25 flex items-center justify-center text-rose-200">
+                    <i class="fa-solid fa-user-lock text-2xl"></i>
+                </div>
+                <div>
+                    <h4 class="text-lg font-semibold">Critical Policy Enforcement</h4>
+                    <p class="text-sm text-slate-300">Access automatically revoked</p>
+                </div>
+            </div>
+            <p class="text-sm text-slate-200 mb-5">
+                An anomalous access pattern was detected for
+                <span id="alert-user" class="font-semibold text-rose-200">Unknown User</span>.
+                Least privilege policy invalidated the token and terminated the session.
+            </p>
+            <button id="alert-close" class="w-full py-2.5 rounded-lg bg-slate-200/15 hover:bg-slate-200/25 transition text-sm">
+                Dismiss
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const elements = {
+            metricActive: document.getElementById("metric-active"),
+            metricTrust: document.getElementById("metric-trust"),
+            metricRevoke: document.getElementById("metric-revoke"),
+            metricStep: document.getElementById("metric-step"),
+            metricAllow: document.getElementById("metric-allow"),
+            tbody: document.getElementById("verification-table-body"),
+            logs: document.getElementById("log-container"),
+            injectBtn: document.getElementById("inject-btn"),
+            alertModal: document.getElementById("alert-modal"),
+            alertUser: document.getElementById("alert-user"),
+            alertClose: document.getElementById("alert-close"),
+        };
+
+        function policyChipClass(state) {
+            if (state === "REVOKE") return "risk-chip risk-revoke";
+            if (state === "STEP_UP") return "risk-chip risk-step";
+            return "risk-chip risk-allow";
+        }
+
+        function trustColor(score) {
+            if (score < 45) return "text-rose-300";
+            if (score < 68) return "text-amber-300";
+            return "text-emerald-300";
+        }
+
+        function renderTable(users) {
+            elements.tbody.innerHTML = "";
+            users.forEach((user) => {
+                const row = document.createElement("tr");
+                row.className = "hover:bg-slate-700/25 transition";
+                row.innerHTML = `
+                    <td class="px-4 py-3">
+                        <div class="font-semibold">${user.name}</div>
+                        <div class="text-xs text-slate-400">${user.role} <span class="mono">(${user.userCode})</span></div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="text-xs">${user.location}</div>
+                        <div class="text-[11px] text-slate-400 mono">${user.ipAddress}</div>
+                        <div class="text-[11px] text-slate-500">Seen: ${user.lastSeen.replace("T", " ")}</div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="text-xs">${user.devicePosture}</div>
+                        <div class="text-[11px] text-slate-300/80">Behavior Score: <span class="font-semibold">${user.behaviorScore}</span></div>
+                        <div class="text-[11px] text-slate-500">Asset: ${user.protectedAsset}</div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="mono font-semibold ${trustColor(user.trustScore)}">${user.trustScore}</div>
+                        <div class="w-20 mt-1 h-1.5 rounded-full bg-slate-700/70 overflow-hidden">
+                            <div class="${user.trustScore < 45 ? "bg-rose-400" : user.trustScore < 68 ? "bg-amber-400" : "bg-emerald-400"} h-full" style="width: ${user.trustScore}%"></div>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="${policyChipClass(user.accessState)}">${user.accessState}</span>
+                    </td>
+                `;
+                elements.tbody.appendChild(row);
+            });
+        }
+
+        function renderMetrics(metrics) {
+            elements.metricActive.textContent = metrics.activeIdentities;
+            elements.metricTrust.textContent = metrics.trustIndex;
+            elements.metricRevoke.textContent = metrics.revokedSessions;
+            elements.metricStep.textContent = metrics.stepUpChallenges;
+            elements.metricAllow.textContent = metrics.allowedSessions;
+        }
+
+        function severityColor(severity) {
+            if (severity === "CRITICAL") return "text-rose-300";
+            if (severity === "WARN") return "text-amber-300";
+            return "text-cyan-300";
+        }
+
+        function renderLogs(events) {
+            elements.logs.innerHTML = "";
+            events.forEach((event) => {
+                const line = document.createElement("div");
+                line.className = `${severityColor(event.severity)} leading-relaxed`;
+                line.innerHTML = `<span class="text-slate-500">[${event.eventTime.replace("T", " ")}]</span> <span class="font-semibold">${event.severity}</span> ${event.message}`;
+                elements.logs.appendChild(line);
+            });
+        }
+
+        async function fetchTick() {
+            try {
+                const response = await fetch("/api/tick");
+                const payload = await response.json();
+                renderMetrics(payload.metrics);
+                renderTable(payload.users);
+                renderLogs(payload.events);
+            } catch (error) {
+                const line = document.createElement("div");
+                line.className = "text-rose-300";
+                line.textContent = `[ERROR] Unable to reach policy engine: ${error.message}`;
+                elements.logs.prepend(line);
+            }
+        }
+
+        async function injectAnomaly() {
+            elements.injectBtn.disabled = true;
+            elements.injectBtn.classList.add("opacity-60");
+            try {
+                const response = await fetch("/api/inject-anomaly", { method: "POST" });
+                const payload = await response.json();
+                if (payload.targetUser) {
+                    elements.alertUser.textContent = payload.targetUser;
+                    elements.alertModal.classList.remove("hidden");
+                    elements.alertModal.classList.add("flex");
+                }
+                await fetchTick();
+            } finally {
+                elements.injectBtn.disabled = false;
+                elements.injectBtn.classList.remove("opacity-60");
+            }
+        }
+
+        elements.injectBtn.addEventListener("click", injectAnomaly);
+        elements.alertClose.addEventListener("click", () => {
+            elements.alertModal.classList.add("hidden");
+            elements.alertModal.classList.remove("flex");
+        });
+
+        fetchTick();
+        setInterval(fetchTick, 4000);
+    </script>
+</body>
+</html> 
